@@ -1,0 +1,6 @@
+Optimality criterion for generalized linear models
+
+The goal of this repository is to compare the speed and accuracy of
+different solvers for regularized GLMs.
+
+
