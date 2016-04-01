@@ -34,7 +34,7 @@ dimnames(X.scaled) <- dimnames(X.unscaled)
 m <- mean(y.unscaled)
 sigma <- sd(y.unscaled)
 y.scaled <- (y.unscaled - m)/sigma
-fit.scaled <- lars(X.scaled, y.scaled, type="lasso", normalize=FALSE)
+fit.scaled <- lars(X.unscaled, y.unscaled, type="lasso", normalize=FALSE)
 beta.scaled <- coef(fit.scaled)
 pred.mat <- predict(fit.scaled, X.scaled)$fit
 pred.manual <- with(fit.scaled, {
@@ -44,9 +44,12 @@ pred.manual <- with(fit.scaled, {
 })
 rbind(pred.mat[1,], pred.manual[1,])
 stopifnot(pred.mat == pred.manual)
+## If the prediction function for an input vector x is f(x) = b +
+## beta'x, then the lars intercept b = meanx'beta + mu.
+intercept.scaled <- with(fit.scaled, -beta.scaled %*% meanx + mu)
 
 lars.path.list <- list()
-for(step.i in 1:nrow(beta.unscaled)){
+for(step.i in 1:nrow(beta.scaled)){
   coef.vec <- fit.scaled$beta[step.i,]
   ## The loss in lars is half of the total squared error (0.5 * RSS)
   ## but the cost function in glmnet is half of the mean squared error
@@ -55,20 +58,21 @@ for(step.i in 1:nrow(beta.unscaled)){
   lambda <- fit.scaled$lambda[step.i] / nrow(X.scaled)
   if(is.na(lambda))lambda <- 0
   lars.path.list[[paste(step.i)]] <- data.table(
-    coef=coef.vec, arclength=sum(abs(coef.vec)),
-    lambda, variable=names(coef.vec))
+    coef=c(intercept.scaled[[step.i]], coef.vec),
+    arclength=sum(abs(coef.vec)),
+    lambda, variable=c("(Intercept)", names(coef.vec)))
 }
 lars.path <- do.call(rbind, lars.path.list)
 
-gfit.scaled <- glmnet(X.scaled, y.scaled, standardize=FALSE)
+gfit.scaled <- glmnet(X.unscaled, y.unscaled, standardize=FALSE)
 glmnet.path.list <- list()
 for(lambda.i in 1:ncol(gfit.scaled$beta)){
-  coef.vec <- gfit.scaled$beta[, lambda.i]
+  coef.vec <- coef(gfit.scaled)[, lambda.i]
   glmnet.path.list[[paste(lambda.i)]] <- data.table(
     lambda=gfit.scaled$lambda[[lambda.i]],
-    variable=rownames(gfit.scaled$beta),
+    variable=names(coef.vec),
     coef=coef.vec,
-    arclength=sum(abs(coef.vec))
+    arclength=sum(abs(coef.vec[-1]))
     )
 }
 glmnet.path <- do.call(rbind, glmnet.path.list)
@@ -77,6 +81,19 @@ library(ggplot2)
 addColumn <- function(dt, pkg){
   data.table(dt, pkg=factor(pkg, c("glmnet", "penalized")))
 }
+ggplot()+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(pkg ~ ., scales="free")+
+  geom_point(
+    aes(lambda, coef, colour=variable),
+    addColumn(glmnet.path, "glmnet"),
+    shape=1
+    )+
+  geom_line(
+    aes(lambda, coef, colour=variable),
+    lars.path)
+
 ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
