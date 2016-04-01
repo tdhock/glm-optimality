@@ -1,3 +1,4 @@
+library(penalized)
 library(glmnet)
 data(prostate,package="ElemStatLearn")
 pros <- subset(prostate,select=-train,train==TRUE)
@@ -18,76 +19,71 @@ pred.manual <- with(fit.unscaled, {
 })
 rbind(pred.mat[1,], pred.manual[1,])
 stopifnot(pred.mat == pred.manual)
-lars.path.list <- list()
-for(step.i in 1:nrow(beta.unscaled)){
-  standardized.coef <- beta.unscaled[step.i,]
-  arclength <- sum(standardized.coef)
-  lambda <- fit.unscaled$lambda[step.i]
-  if(is.na(lambda))lambda <- 0
-  lars.path.list[[paste(step.i)]] <- data.table(
-    coef=fit.unscaled$beta[step.i,],
-    standardized.coef, arclength, lambda, variable=names(standardized.coef))
-}
-lars.path <- do.call(rbind, lars.path.list)
-
-gfit.unscaled <- glmnet(X.unscaled, y.unscaled)
-glmnet.path.list <- list()
-for(lambda.i in 1:nrow(gfit.unscaled$beta)){
-  glmnet.path.list[[paste(lambda.i)]] <- data.table(
-    lambda=gfit.unscaled$lambda[[lambda.i]],
-    variable=rownames(gfit.unscaled$beta),
-    coef=gfit.unscaled$beta[, lambda.i]
-    )
-}
-glmnet.path <- do.call(rbind, glmnet.path.list)
-
-library(ggplot2)
-addColumn <- function(dt, facet){
-  data.table(dt, facet=factor(facet, c("coef", "standardized")))
-}
-ggplot()+
-  theme_bw()+
-  theme(panel.margin=grid::unit(0, "lines"))+
-  facet_grid(facet ~ ., scales="free")+
-  geom_point(
-    aes(lambda, coef, colour=variable),
-    glmnet.path,
-    shape=1
-    )+
-  geom_line(
-    aes(lambda, standardized.coef, colour=variable),
-    addColumn(lars.path, "standardized"))+
-  geom_line(
-    aes(lambda, coef, colour=variable),
-    addColumn(lars.path, "coef"))
 
 M <- matrix(
   colMeans(X.unscaled), nrow(X.unscaled), ncol(X.unscaled), byrow=TRUE)
+X.centered <- X.unscaled - M
+l2norm.vec <- apply(X.centered, 2, function(x)sqrt(sum(x*x)))
+stopifnot(sum(abs(
+  l2norm.vec - fit.unscaled$normx
+  )) < 1e6)
 sd.vec <- apply(X.unscaled, 2, sd)
 S <- diag(1/sd.vec)
-X.scaled <- (X.unscaled - M) %*% S
+X.scaled <- X.centered %*% S
+dimnames(X.scaled) <- dimnames(X.unscaled)
 m <- mean(y.unscaled)
 sigma <- sd(y.unscaled)
 y.scaled <- (y.unscaled - m)/sigma
 fit.scaled <- lars(X.scaled, y.scaled, type="lasso", normalize=FALSE)
 beta.scaled <- coef(fit.scaled)
 pred.mat <- predict(fit.scaled, X.scaled)$fit
-pred.manual <- X.scaled %*% t(beta.scaled) + fit.scaled$mu
+pred.manual <- with(fit.scaled, {
+  ## Even when normalize=FALSE, the mean of the variables is
+  ## subtracted away (but the variance stays the same).
+  scale(X.scaled, meanx, FALSE) %*% t(beta.scaled) + mu
+})
 rbind(pred.mat[1,], pred.manual[1,])
-pred.mat == pred.manual
+stopifnot(pred.mat == pred.manual)
 
-rbind(beta.scaled[,1], beta.unscaled[,1])
-beta.scaled[,1]/beta.unscaled[,1]
-stopifnot(beta.scaled == beta.unscaled)
+lars.path.list <- list()
+for(step.i in 1:nrow(beta.unscaled)){
+  standardized.coef <- beta.unscaled[step.i,]
+  arclength <- sum(standardized.coef)
+  lambda <- fit.scaled$lambda[step.i] / nrow(X.scaled)
+  if(is.na(lambda))lambda <- 0
+  lars.path.list[[paste(step.i)]] <- data.table(
+    coef=fit.scaled$beta[step.i,],
+    standardized.coef, arclength, lambda, variable=names(standardized.coef))
+}
+lars.path <- do.call(rbind, lars.path.list)
 
-arclength <- rowSums(abs(beta.unscaled))
-path <- data.frame(melt(beta.unscaled), arclength)
-names(path)[1:3] <- c("step","variable","standardized.coef")
+gfit.scaled <- glmnet(X.scaled, y.scaled, standardize=FALSE)
+glmnet.path.list <- list()
+for(lambda.i in 1:ncol(gfit.scaled$beta)){
+  glmnet.path.list[[paste(lambda.i)]] <- data.table(
+    lambda=gfit.scaled$lambda[[lambda.i]],
+    variable=rownames(gfit.scaled$beta),
+    coef=gfit.scaled$beta[, lambda.i]
+    )
+}
+glmnet.path <- do.call(rbind, glmnet.path.list)
+
 library(ggplot2)
-ggplot(path,aes(arclength,standardized.coef,colour=variable))+
-  geom_line(aes(group=variable))+
-  ggtitle("LASSO path for prostate cancer data calculated using the LARS")+
-  xlim(0,20)
+addColumn <- function(dt, pkg){
+  data.table(dt, pkg=factor(pkg, c("glmnet", "penalized")))
+}
+ggplot()+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(pkg ~ ., scales="free")+
+  geom_point(
+    aes(lambda, coef, colour=variable),
+    addColumn(glmnet.path, "glmnet"),
+    shape=1
+    )+
+  geom_line(
+    aes(lambda, coef, colour=variable),
+    lars.path)
 
 ## This script defines functions for computing an optimality criterion
 ## based on the subdifferential, 0 \in \partial C(\beta, w). If there
