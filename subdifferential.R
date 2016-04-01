@@ -47,23 +47,28 @@ stopifnot(pred.mat == pred.manual)
 
 lars.path.list <- list()
 for(step.i in 1:nrow(beta.unscaled)){
-  standardized.coef <- beta.unscaled[step.i,]
-  arclength <- sum(standardized.coef)
+  coef.vec <- fit.scaled$beta[step.i,]
+  ## The loss in lars is half of the total squared error (0.5 * RSS)
+  ## but the cost function in glmnet is half of the mean squared error
+  ## (0.5 * RSS / N), so we divide the lars lambda value by N so that
+  ## it is comparable to the glmnet lambda values.
   lambda <- fit.scaled$lambda[step.i] / nrow(X.scaled)
   if(is.na(lambda))lambda <- 0
   lars.path.list[[paste(step.i)]] <- data.table(
-    coef=fit.scaled$beta[step.i,],
-    standardized.coef, arclength, lambda, variable=names(standardized.coef))
+    coef=coef.vec, arclength=sum(abs(coef.vec)),
+    lambda, variable=names(coef.vec))
 }
 lars.path <- do.call(rbind, lars.path.list)
 
 gfit.scaled <- glmnet(X.scaled, y.scaled, standardize=FALSE)
 glmnet.path.list <- list()
 for(lambda.i in 1:ncol(gfit.scaled$beta)){
+  coef.vec <- gfit.scaled$beta[, lambda.i]
   glmnet.path.list[[paste(lambda.i)]] <- data.table(
     lambda=gfit.scaled$lambda[[lambda.i]],
     variable=rownames(gfit.scaled$beta),
-    coef=gfit.scaled$beta[, lambda.i]
+    coef=coef.vec,
+    arclength=sum(abs(coef.vec))
     )
 }
 glmnet.path <- do.call(rbind, glmnet.path.list)
@@ -77,12 +82,12 @@ ggplot()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(pkg ~ ., scales="free")+
   geom_point(
-    aes(lambda, coef, colour=variable),
+    aes(arclength, coef, colour=variable),
     addColumn(glmnet.path, "glmnet"),
     shape=1
     )+
   geom_line(
-    aes(lambda, coef, colour=variable),
+    aes(arclength, coef, colour=variable),
     lars.path)
 
 ## This script defines functions for computing an optimality criterion
