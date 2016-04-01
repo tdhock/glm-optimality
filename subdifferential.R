@@ -77,6 +77,23 @@ for(lambda.i in 1:ncol(gfit.scaled$beta)){
 }
 glmnet.path <- do.call(rbind, glmnet.path.list)
 
+pfit.list <- with(gfit.scaled, penalized(
+  y.unscaled, X.unscaled, lambda1=min(lambda), steps=length(lambda),
+  standardize=FALSE))
+pfit <- penalized(
+  y.unscaled, X.unscaled,
+  lambda1=1,
+  model="linear",
+  standardize=FALSE)
+ufit <- glm(y.unscaled ~ X.unscaled)
+upred <- predict(ufit)
+ppred <- predict(pfit, X.unscaled)
+stopifnot(max(abs(upred - ppred[,1])) < 1e-10)
+sum(dnorm(y.unscaled, ppred[,1], ppred[,2], log=TRUE))
+
+coef(pfit)
+gfit.scaled$beta[, 10]
+
 library(ggplot2)
 addColumn <- function(dt, pkg){
   data.table(dt, pkg=factor(pkg, c("glmnet", "penalized")))
