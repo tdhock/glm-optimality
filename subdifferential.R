@@ -1,32 +1,14 @@
 library(penalized)
 library(glmnet)
+library(lars)
 data(prostate,package="ElemStatLearn")
 pros <- subset(prostate,select=-train,train==TRUE)
 ycol <- which(names(pros)=="lpsa")
 X.unscaled <- as.matrix(pros[-ycol])
 y.unscaled <- pros[[ycol]]
-library(lars)
-fit.unscaled <- lars(X.unscaled, y.unscaled, type="lasso", normalize=TRUE)
-## the returned beta matrix is scaled to be in original X units, so to
-## recover the scaled coefficients for plotting we need to use normx.
-beta.unscaled <- scale(coef(fit.unscaled), FALSE, 1/fit.unscaled$normx)
-pred.mat <- predict(fit.unscaled, X.unscaled)$fit
-pred.manual <- with(fit.unscaled, {
-  ## For prediction we do not need to use normx since the returned
-  ## beta matrix is already scaled to be in units of the original X
-  ## variables.
-  scale(X.unscaled, meanx, FALSE) %*% t(beta) + mu
-})
-rbind(pred.mat[1,], pred.manual[1,])
-stopifnot(pred.mat == pred.manual)
-
 M <- matrix(
   colMeans(X.unscaled), nrow(X.unscaled), ncol(X.unscaled), byrow=TRUE)
 X.centered <- X.unscaled - M
-l2norm.vec <- apply(X.centered, 2, function(x)sqrt(sum(x*x)))
-stopifnot(sum(abs(
-  l2norm.vec - fit.unscaled$normx
-  )) < 1e6)
 sd.vec <- apply(X.unscaled, 2, sd)
 S <- diag(1/sd.vec)
 X.scaled <- X.centered %*% S
@@ -34,10 +16,15 @@ dimnames(X.scaled) <- dimnames(X.unscaled)
 m <- mean(y.unscaled)
 sigma <- sd(y.unscaled)
 y.scaled <- (y.unscaled - m)/sigma
-fit.scaled <- lars(X.scaled, y.scaled, type="lasso", normalize=FALSE)
-beta.scaled <- coef(fit.scaled)
-pred.mat <- predict(fit.scaled, X.scaled)$fit
-pred.manual <- with(fit.scaled, {
+
+## X and y will be used in the various solvers.
+X <- X.scaled
+y <- y.scaled
+
+fit.lars <- lars(X, y, type="lasso", normalize=FALSE)
+beta.scaled <- coef(fit.lars)
+pred.mat <- predict(fit.lars, X.scaled)$fit
+pred.manual <- with(fit.lars, {
   ## Even when normalize=FALSE, the mean of the variables is
   ## subtracted away (but the variance stays the same).
   scale(X.scaled, meanx, FALSE) %*% t(beta.scaled) + mu
@@ -46,16 +33,16 @@ rbind(pred.mat[1,], pred.manual[1,])
 stopifnot(pred.mat == pred.manual)
 ## If the prediction function for an input vector x is f(x) = b +
 ## beta'x, then the lars intercept b = meanx'beta + mu.
-intercept.scaled <- with(fit.scaled, -beta.scaled %*% meanx + mu)
+intercept.scaled <- with(fit.lars, -beta.scaled %*% meanx + mu)
 
 lars.path.list <- list()
 for(step.i in 1:nrow(beta.scaled)){
-  coef.vec <- fit.scaled$beta[step.i,]
+  coef.vec <- fit.lars$beta[step.i,]
   ## The loss in lars is half of the total squared error (0.5 * RSS)
   ## but the cost function in glmnet is half of the mean squared error
   ## (0.5 * RSS / N), so we divide the lars lambda value by N so that
   ## it is comparable to the glmnet lambda values.
-  lambda <- fit.scaled$lambda[step.i] / nrow(X.scaled)
+  lambda <- fit.lars$lambda[step.i] / nrow(X.scaled)
   if(is.na(lambda))lambda <- 0
   lars.path.list[[paste(step.i)]] <- data.table(
     coef=c(intercept.scaled[[step.i]], coef.vec),
@@ -64,12 +51,12 @@ for(step.i in 1:nrow(beta.scaled)){
 }
 lars.path <- do.call(rbind, lars.path.list)
 
-gfit.scaled <- glmnet(X.scaled, y.scaled, standardize=FALSE)
+fit.glmnet <- glmnet(X, y, standardize=FALSE)
 glmnet.path.list <- list()
-for(lambda.i in 1:ncol(gfit.scaled$beta)){
-  coef.vec <- coef(gfit.scaled)[, lambda.i]
+for(lambda.i in 1:ncol(fit.glmnet$beta)){
+  coef.vec <- coef(fit.glmnet)[, lambda.i]
   glmnet.path.list[[paste(lambda.i)]] <- data.table(
-    lambda=gfit.scaled$lambda[[lambda.i]],
+    lambda=fit.glmnet$lambda[[lambda.i]],
     variable=names(coef.vec),
     coef=coef.vec,
     arclength=sum(abs(coef.vec[-1]))
@@ -78,42 +65,42 @@ for(lambda.i in 1:ncol(gfit.scaled$beta)){
 glmnet.path <- do.call(rbind, glmnet.path.list)
 
 lars.at.glmnet.lambda <- predict(
-  fit.scaled,
-  s=gfit.scaled$lambda * nrow(X.scaled),
+  fit.lars,
+  s=fit.glmnet$lambda * nrow(X.scaled),
   type="coefficients", mode="lambda")
 coef.mat.list <- list(
-  glmnet=t(gfit.scaled$beta),
+  glmnet=t(fit.glmnet$beta),
   lars=lars.at.glmnet.lambda$coefficients)
 lapply(coef.mat.list, head)
-coef.mat.lambda <- gfit.scaled$lambda
+coef.mat.lambda <- fit.glmnet$lambda
 
-pfit.list <- with(gfit.scaled, penalized(
-  y.unscaled, X.unscaled, lambda1=min(lambda), steps=length(lambda),
+## penalized pacakge.
+fit.penalized.list <- with(fit.glmnet, penalized(
+  y, X, lambda1=min(lambda), steps=length(lambda),
   standardize=FALSE))
-pfit <- penalized(
-  y.unscaled, X.unscaled,
+fit.penalized <- penalized(
+  y, X,
   lambda1=1,
   model="linear",
   standardize=FALSE)
-pfit10 <- penalized(
-  y.unscaled, X.unscaled,
-  lambda1=10,
-  model="linear",
-  standardize=FALSE)
-ufit <- glm(y.unscaled ~ X.unscaled)
-upred <- predict(ufit)
-ppred <- predict(pfit, X.unscaled)
-stopifnot(max(abs(upred - ppred[,1])) < 1e-10)
-sum(dnorm(y.unscaled, ppred[,1], ppred[,2], log=TRUE)) #not the lik!
-sum(dnorm(y.unscaled, ppred[,1], 1, log=TRUE)) #not the lik!
-residuals <- ppred[,1] - y.unscaled
+ppred <- predict(fit.penalized, X)
+residuals <- ppred[,1] - y
 n <- length(residuals)
 ss <- sum(residuals * residuals)
+## The equation for the loglik below "is essentially the likelihood,
+## but with sigma=1 plugged in" and comes from
+## https://github.com/cran/penalized/blob/master/R/linear.R#L18
 (loglik <- (-n/2) * (log(2*pi/n) + 1 + log(ss + .Machine$double.xmin)))
-(-n/2) * (log(2*pi/n) + 1 + log(ss))
+fit.penalized@loglik
+stopifnot(fit.penalized@loglik == loglik)
+## without adding inside the log, still equal.
+stopifnot(fit.penalized@loglik == (-n/2) * (log(2*pi/n) + 1 + log(ss)))
 
-coef(pfit)
-gfit.scaled$beta[, 10]
+## some checks using un-regularized glm solver.
+fit.unregularized <- glm(y ~ X)
+upred <- predict(fit.unregularized)
+sum(dnorm(y, ppred[,1], ppred[,2], log=TRUE)) #not the loglik!
+sum(dnorm(y, ppred[,1], 1, log=TRUE)) #not the loglik!
 
 library(ggplot2)
 addColumn <- function(dt, pkg){
