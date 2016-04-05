@@ -85,11 +85,22 @@ pfit <- penalized(
   lambda1=1,
   model="linear",
   standardize=FALSE)
+pfit10 <- penalized(
+  y.unscaled, X.unscaled,
+  lambda1=10,
+  model="linear",
+  standardize=FALSE)
 ufit <- glm(y.unscaled ~ X.unscaled)
 upred <- predict(ufit)
 ppred <- predict(pfit, X.unscaled)
 stopifnot(max(abs(upred - ppred[,1])) < 1e-10)
-sum(dnorm(y.unscaled, ppred[,1], ppred[,2], log=TRUE))
+sum(dnorm(y.unscaled, ppred[,1], ppred[,2], log=TRUE)) #not the lik!
+sum(dnorm(y.unscaled, ppred[,1], 1, log=TRUE)) #not the lik!
+residuals <- ppred[,1] - y.unscaled
+n <- length(residuals)
+ss <- sum(residuals * residuals)
+(loglik <- (-n/2) * (log(2*pi/n) + 1 + log(ss + .Machine$double.xmin)))
+(-n/2) * (log(2*pi/n) + 1 + log(ss))
 
 coef(pfit)
 gfit.scaled$beta[, 10]
