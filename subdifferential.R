@@ -34,7 +34,7 @@ dimnames(X.scaled) <- dimnames(X.unscaled)
 m <- mean(y.unscaled)
 sigma <- sd(y.unscaled)
 y.scaled <- (y.unscaled - m)/sigma
-fit.scaled <- lars(X.unscaled, y.unscaled, type="lasso", normalize=FALSE)
+fit.scaled <- lars(X.scaled, y.scaled, type="lasso", normalize=FALSE)
 beta.scaled <- coef(fit.scaled)
 pred.mat <- predict(fit.scaled, X.scaled)$fit
 pred.manual <- with(fit.scaled, {
@@ -64,7 +64,7 @@ for(step.i in 1:nrow(beta.scaled)){
 }
 lars.path <- do.call(rbind, lars.path.list)
 
-gfit.scaled <- glmnet(X.unscaled, y.unscaled, standardize=FALSE)
+gfit.scaled <- glmnet(X.scaled, y.scaled, standardize=FALSE)
 glmnet.path.list <- list()
 for(lambda.i in 1:ncol(gfit.scaled$beta)){
   coef.vec <- coef(gfit.scaled)[, lambda.i]
@@ -76,6 +76,16 @@ for(lambda.i in 1:ncol(gfit.scaled$beta)){
     )
 }
 glmnet.path <- do.call(rbind, glmnet.path.list)
+
+lars.at.glmnet.lambda <- predict(
+  fit.scaled,
+  s=gfit.scaled$lambda * nrow(X.scaled),
+  type="coefficients", mode="lambda")
+coef.mat.list <- list(
+  glmnet=t(gfit.scaled$beta),
+  lars=lars.at.glmnet.lambda$coefficients)
+lapply(coef.mat.list, head)
+coef.mat.lambda <- gfit.scaled$lambda
 
 pfit.list <- with(gfit.scaled, penalized(
   y.unscaled, X.unscaled, lambda1=min(lambda), steps=length(lambda),
