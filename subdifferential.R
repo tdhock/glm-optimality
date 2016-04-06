@@ -107,7 +107,33 @@ W0 <- cbind(rep(0, ncol(X)))
 y.spams <- cbind(y)
 spams.path.list <- list()
 for(lambda in coef.mat.lambda){
-  W0 <- spams.fistaFlat(y.spams, X, W0, loss="square", regul="l1", lambda1=lambda*nrow(X))
+  lambda1 <- lambda * nrow(X)
+  W0 <- spams.fistaFlat(y.spams, X, W0, loss="square", regul="l1", lambda1=lambda1)
+  ## From the docs, this solves argmin_w 0.5 || y - Xw ||_2^2 + lambda1 || w ||_1.
+  pred.vec <- X %*% W0
+  dual.norm <- function(x)max(abs(x))
+  primal.norm <- function(x)sum(abs(x))
+  gradient <- (pred.vec - y.spams)/nrow(X)
+  inside.dual.norm <- t(X) %*% gradient
+  dual.norm.value <- dual.norm(inside.dual.norm)
+  ## Julien's thesis does the derivation for the square loss
+  ## \tilde f(z) = ||y-z||_2^2 / 2n
+  ## which has the Fenchel/convex conjugate function
+  ## \tilde f^*(k) = n ||k||_2^2 / 2 + k'y.
+  ## so the total cost function is
+  ## g(w) = ||y - Xw||_2^2 / 2n + lambda * ||w||_1
+  ## Note that is lambda not lambda1!
+  grad.coef <- min(1, lambda/dual.norm.value)
+  dual.vec <- grad.coef * gradient
+  residual.vec <- y-pred.vec
+  primal.cost <- sum(residual.vec * residual.vec) / 2 / nrow(X) + lambda * primal.norm(W0)
+  loss.conjugate <- nrow(X)/2 * sum(dual.vec * dual.vec) + sum(y * dual.vec)
+  penalty.conjugate.arg <- - t(X) %*% dual.vec / lambda
+  penalty.conjugate <- dual.norm(penalty.conjugate.arg)
+  ##stopifnot(penalty.conjugate <= 1)
+  duality.gap <- primal.cost + loss.conjugate 
+  cat(sprintf("lambda=%f, penalty conjugate=%f, duality gap=%e\n",
+              lambda, penalty.conjugate, duality.gap))
   spams.path.list[[paste(lambda)]] <- data.table(
     lambda, variable=colnames(X), coef=as.numeric(W0), arclength=sum(abs(W0)))
 }
@@ -115,7 +141,7 @@ spams.path <- do.call(rbind, spams.path.list)
 
 library(ggplot2)
 addColumn <- function(dt, pkg){
-  data.table(dt, pkg=factor(pkg, c("glmnet", "penalized")))
+  data.table(dt, pkg=factor(pkg, c("spams", "glmnet", "penalized")))
 }
 ggplot()+
   theme_bw()+
@@ -124,6 +150,11 @@ ggplot()+
   geom_point(
     aes(lambda, coef, colour=variable),
     addColumn(glmnet.path, "glmnet"),
+    shape=1
+    )+
+  geom_point(
+    aes(lambda, coef, colour=variable),
+    addColumn(spams.path, "spams"),
     shape=1
     )+
   geom_line(
