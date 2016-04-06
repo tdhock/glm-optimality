@@ -1,5 +1,6 @@
 library(penalized)
 library(glmnet)
+library(spams)
 library(lars)
 data(prostate,package="ElemStatLearn")
 pros <- subset(prostate,select=-train,train==TRUE)
@@ -102,6 +103,16 @@ upred <- predict(fit.unregularized)
 sum(dnorm(y, ppred[,1], ppred[,2], log=TRUE)) #not the loglik!
 sum(dnorm(y, ppred[,1], 1, log=TRUE)) #not the loglik!
 
+W0 <- cbind(rep(0, ncol(X)))
+y.spams <- cbind(y)
+spams.path.list <- list()
+for(lambda in coef.mat.lambda){
+  W0 <- spams.fistaFlat(y.spams, X, W0, loss="square", regul="l1", lambda1=lambda*nrow(X))
+  spams.path.list[[paste(lambda)]] <- data.table(
+    lambda, variable=colnames(X), coef=as.numeric(W0), arclength=sum(abs(W0)))
+}
+spams.path <- do.call(rbind, spams.path.list)
+
 library(ggplot2)
 addColumn <- function(dt, pkg){
   data.table(dt, pkg=factor(pkg, c("glmnet", "penalized")))
@@ -126,6 +137,11 @@ ggplot()+
   geom_point(
     aes(arclength, coef, colour=variable),
     addColumn(glmnet.path, "glmnet"),
+    shape=1
+    )+
+  geom_point(
+    aes(arclength, coef, colour=variable),
+    addColumn(spams.path, "spams"),
     shape=1
     )+
   geom_line(
