@@ -22,12 +22,20 @@
 ## 3. For the weights that are NOT zero we compute
 ## |\lambda[(1-\alpha)w + \alpha\sign(w)]|.
 
+loss.list <- list(
+  gaussian=function(r, y)0.5 * (r-y)^2,
+  poisson=function(r, y)exp(r) - y*r,
+  logistic=function(r, y)log(1+exp(-y*r)))
 derivative.list <- list(
   gaussian=function(r, y)r-y,
-  poisson=function(r, y)exp(r)-y)
+  poisson=function(r, y)exp(r)-y,
+  logistic=function(r, y)-y/(1+exp(y*r)))
+curve(derivative.list$logistic(x, 1), -2, 2)
+curve(derivative.list$logistic(x, -1), -2, 2)
 
 subdifferentialCriteria <- function
-### Compute subdifferential optimality criteria for the elastic net problem.
+### Compute subdifferential optimality criteria for an elastic net
+### regularized GLM.
 (y,
 ### Numeric vector of output labels (n observations)
  X,
@@ -36,23 +44,26 @@ subdifferentialCriteria <- function
 ### Numeric vector of weights (p features).
  lambda,
 ### Numeric lambda regularization parameter (scalar).
- alpha=1
+ alpha=1,
 ### Numeric elastic net parameter (between 0 and 1).
+ derivative.fun=derivative.list$gaussian
+### observation-specific derivative function(prediction.vec,
+### label.vec) from derivative.list.
  ){
   stopifnot(is.matrix(X))
   stopifnot(is.numeric(X))
   stopifnot(is.numeric(y))
   stopifnot(is.numeric(w))
   stopifnot(is.numeric(lambda))
-  stopifnot(length(lambda) == 1) 
+  stopifnot(length(lambda) == 1) #TODO support lambda vector w matrix.
   stopifnot(nrow(X) == length(y))
   stopifnot(ncol(X) == length(w))
   stopifnot(is.numeric(alpha))
   stopifnot(length(alpha)==1)
   stopifnot(0 <= alpha && alpha <= 1)
   pred.vec <- X %*% w
-  residual.vec <- pred.vec - y
-  gradient.vec <- t(X) %*% residual.vec / nrow(X)
+  observation.gradient.vec <- derivative.fun(pred.vec, y)
+  weight.gradient.vec <- t(X) %*% observation.gradient.vec / nrow(X)
   positive.part <- function(x)ifelse(x<0, 0, x)
   common.term <- gradient.vec + lambda * (1-alpha) * weight.vec
   ifelse(weight.vec==0,
