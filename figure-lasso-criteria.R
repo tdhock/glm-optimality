@@ -1,7 +1,15 @@
-library(penalized)
-library(glmnet)
-library(spams)
-library(lars)
+works_with_R("3.2.3",
+             data.table="1.9.7",
+             ggplot2="1.0.1",
+             directlabels="2015.6.17",
+             microbenchmark="1.4.2.1",
+             penalized="0.9.42",
+             glmnet="1.9.5",
+             spams="2.5",
+             lars="1.2")
+
+## The spams package can be downloaded from
+## http://spams-devel.gforge.inria.fr/hitcounter2.php?file=33815/spams-R-v2.5-svn2014-07-04.tar.gz
 data(prostate,package="ElemStatLearn")
 pros <- subset(prostate,select=-train,train==TRUE)
 ycol <- which(names(pros)=="lpsa")
@@ -52,7 +60,7 @@ for(step.i in 1:nrow(beta.scaled)){
 }
 lars.path <- do.call(rbind, lars.path.list)
 
-glmnet.thresh <- spams.tol <- 1e-12
+glmnet.thresh <- 1e-07
 fit.glmnet <- glmnet(X, y, standardize=FALSE, thresh=glmnet.thresh)
 glmnet.path.list <- list()
 for(lambda.i in 1:ncol(fit.glmnet$beta)){
@@ -165,6 +173,7 @@ y.spams <- cbind(y)
 spams.path.list <- list()
 coef.mat.list$spams <- matrix(
   NA, length(coef.mat.lambda), ncol(X), dimnames=list(NULL, colnames(X)))
+spams.tol <- 0.000001
 for(lambda.i in seq_along(coef.mat.lambda)){
   lambda <- coef.mat.lambda[[lambda.i]]
   lambda1 <- lambda * nrow(X)
@@ -179,7 +188,6 @@ for(lambda.i in seq_along(coef.mat.lambda)){
 }
 spams.path <- do.call(rbind, spams.path.list)
 
-library(microbenchmark)
 timing.coef.list <- list()
 timing.df <- microbenchmark(glmnet={
   timing.coef.list$glmnet <- glmnet(X, y, standardize=FALSE, thresh=glmnet.thresh)$beta
@@ -261,7 +269,8 @@ ggplot()+
     aes(lambda, coef, colour=variable),
     lars.path)
 
-ggplot()+
+fig.coef.path <- ggplot()+
+  ggtitle("lars (lines) is consistent with other solvers (dots)")+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(pkg ~ ., scales="free")+
@@ -278,6 +287,9 @@ ggplot()+
   geom_line(
     aes(arclength, coef, colour=variable),
     lars.path)
+pdf("figure-lasso-criteria-path.pdf")
+print(fig.coef.path)
+dev.off()
 
 convergence.list <- list()
 for(pkg in names(coef.mat.list)){
@@ -299,20 +311,24 @@ convergence <- do.call(rbind, convergence.list)
 
 ## Accuracy of different solvers using the four different criteria.
 with.legend <- ggplot()+
+  ggtitle("optimality criteria using default solver thresholds")+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
   facet_grid(criterion.name ~ ., scales="free")+
   geom_point(aes(log10(lambda), log10(criterion.value), color=pkg),
              shape=1,
              data=convergence)
-library(directlabels)
-(with.labels <- direct.label(with.legend, "first.polygons"))
+(with.labels <- direct.label(with.legend+xlim(-3.3, 0), "first.polygons"))
+pdf("figure-lasso-criteria-all.pdf")
+print(with.labels)
+dev.off()
 
 ## Subdifferential optimality criterion is pretty much the same as the
 ## duality gap.
 scatter.dt <- dcast(convergence, pkg + lambda ~ criterion.name, value.var="criterion.value")
 abline.dt <- data.table(slope=1, intercept=0)
-ggplot()+
+fig.scatter.leg <- ggplot()+
+  ggtitle("subdifferential is consistent with duality gap")+
   coord_equal()+
   geom_abline(aes(slope=slope, intercept=intercept),
               data=abline.dt,
@@ -320,3 +336,7 @@ ggplot()+
   geom_point(aes(log10(dualityGap), log10(subdifferentialL1), color=pkg),
              shape=1,
              data=scatter.dt)
+fig.scatter <- direct.label(fig.scatter.leg)
+pdf("figure-lasso-criteria.pdf")
+print(fig.scatter)
+dev.off()

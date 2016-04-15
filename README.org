@@ -1,6 +1,28 @@
-Optimality criterion for generalized linear models
+Optimality criteria for generalized linear models
 
 The goal of this repository is to compare the speed and accuracy of
-different solvers for regularized GLMs.
+different solvers for regularized GLMs. Type =make= on the command
+line to re-do all computations.
 
+** TODOs
+
+- Type equations for surrogate loss functions (and constants which
+  make their infimum 0), derivatives.
+- What to do about numerical instability of the gaussian? Linear
+  Taylor approximation of tails of the derivative?
+- Figures for comparing L2 regularized models: glmnet,
+  https://github.com/IshmaelBelghazi/bigoptim, MASS:lm.ridge.
+- Duality gap computations for elastic net regularized interval
+  regression.
+
+** 15 Apr 2016
+
+[[file:figure-interval-loss-derivative.R]] computes surrogate loss and
+derivative functions for interval regression using Gaussian or
+Logistic likelihood.
+
+** 6 Apr 2016
+
+[[file:figure-lasso-criteria.R]] computes subdifferential criteria and
+duality gaps for lars, glmnet, spams solvers.
 

@@ -32,6 +32,7 @@ derivative.list <- list(
   })
 curve(derivative.list$gaussian(x, 0, 0), -10, 10, asp=1)
 curve(derivative.list$gaussian(x, -3, 3), -10, 10, asp=1, add=TRUE, col="blue")
+points(-10, -7, col="blue") #
 curve(derivative.list$gaussian(x, -5, Inf), -10, 10, asp=1, add=TRUE, col="red")
 curve(derivative.list$gaussian(x, -Inf, 5), -10, 10, asp=1, add=TRUE, col="violet")
 
@@ -44,12 +45,10 @@ loss.list <- list(
            -log(pnorm(res.lo) - pnorm(res.hi)))
   })
 curve(loss.list$gaussian(x, 0, 0), -10, 10, asp=1)
-curve(loss.list$gaussian(x, -3, 3), -10, 10, asp=1, add=TRUE, col="blue")
+curve(loss.list$gaussian(x, -0.3, 0.3), -10, 10, asp=1, add=TRUE, col="blue")
 curve(loss.list$gaussian(x, -5, Inf), -10, 10, asp=1, add=TRUE, col="red")
 curve(loss.list$gaussian(x, -Inf, 5), -10, 10, asp=1, add=TRUE, col="violet")
 
-## TODO: plot tangent lines to verify computation.
-      
 subdifferentialCriteria <- function
 ### Compute subdifferential optimality criteria for an elastic net
 ### regularized GLM.

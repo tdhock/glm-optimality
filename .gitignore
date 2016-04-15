@@ -1,2 +1,6 @@
 *~
 .Rhistory
+auto
+*.log
+*.aux
+*.pdf
