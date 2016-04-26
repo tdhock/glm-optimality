@@ -30,6 +30,27 @@ ggplot()+
             data=fun.values)
 
 loss.list <- list(
+  gaussian=function(r, y.lo, y.hi){
+    res.lo <- r - y.lo
+    res.hi <- r - y.hi
+    is.equal <- res.lo == res.hi
+    numerator <- dnorm(res.hi) - dnorm(res.lo)
+    denominator <- pnorm(res.lo) - pnorm(res.hi)
+    denominator <-
+      ifelse(denominator==0, pnorm(-res.hi)-pnorm(-res.lo), denominator)
+    loss <- ifelse(
+      is.equal,
+      0.5 * res.lo * res.lo,
+      -log(denominator))
+    derivative <- ifelse(is.equal, res.lo, numerator/denominator)
+    y.diff <- (y.hi - y.lo)/2
+    is.interval <- -Inf < y.lo & y.lo < y.hi & y.hi < Inf
+    constant <- ifelse(
+      is.interval,
+      log(pnorm(y.diff)-pnorm(-y.diff)),
+      0)
+    cbind(loss, derivative, constant)
+  },
   gaussian.diff=function(r, y.lo, y.hi){
     res.lo <- r - y.lo
     res.hi <- r - y.hi
@@ -122,7 +143,8 @@ loss.lines <- do.call(rbind, loss.lines.list)
 tangent.lines <- loss.lines[prediction==2,]
 linetypes <- c(
   logistic="dashed",
-  gaussian.diff="solid",
+  gaussian="solid",
+  gaussian.diff="dotted",
   gaussian.mean="dotted")
 fig.interval.loss <- ggplot()+
   ggtitle("interval regression surrogate loss functions")+
