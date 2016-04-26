@@ -16,7 +16,7 @@ curve(1-pnorm(-x), -10, 10, col="red", n=1001, add=TRUE)
 curve(pnorm(x, log.p=TRUE), -10, 10, lwd=2, n=1001)
 curve(log(1-pnorm(-x)), -10, 10, col="red", n=1001, add=TRUE)
 fun.values.list <- list()
-input.vec <- seq(-10, 10, by=0.1)
+input.vec <- seq(-100, 10, by=0.1)
 for(fun.name in names(fun.list)){
   fun <- fun.list[[fun.name]]
   fun.values.list[[fun.name]] <- data.table(
@@ -35,48 +35,15 @@ loss.list <- list(
     res.hi <- r - y.hi
     is.equal <- res.lo == res.hi
     numerator <- dnorm(res.hi) - dnorm(res.lo)
-    denominator <- pnorm(res.lo) - pnorm(res.hi)
-    denominator <-
-      ifelse(denominator==0, pnorm(-res.hi)-pnorm(-res.lo), denominator)
-    loss <- ifelse(
-      is.equal,
-      0.5 * res.lo * res.lo,
-      -log(denominator))
-    derivative <- ifelse(is.equal, res.lo, numerator/denominator)
-    y.diff <- (y.hi - y.lo)/2
-    is.interval <- -Inf < y.lo & y.lo < y.hi & y.hi < Inf
-    constant <- ifelse(
-      is.interval,
-      log(pnorm(y.diff)-pnorm(-y.diff)),
-      0)
-    cbind(loss, derivative, constant)
-  },
-  gaussian.diff=function(r, y.lo, y.hi){
-    res.lo <- r - y.lo
-    res.hi <- r - y.hi
-    is.equal <- res.lo == res.hi
-    numerator <- dnorm(res.hi) - dnorm(res.lo)
-    ## There is some numerical instability! Sometimes the denominator can be zero.
-    denominator <- pnorm(res.lo) - pnorm(res.hi)
-    loss <- ifelse(
-      is.equal,
-      0.5 * res.lo * res.lo,
-      -log(denominator))
-    derivative <- ifelse(is.equal, res.lo, numerator/denominator)
-    y.diff <- (y.hi - y.lo)/2
-    is.interval <- -Inf < y.lo & y.lo < y.hi & y.hi < Inf
-    constant <- ifelse(
-      is.interval,
-      log(pnorm(y.diff)-pnorm(-y.diff)),
-      0)
-    cbind(loss, derivative, constant)
-  },
-  gaussian.mean=function(r, y.lo, y.hi){
-    res.lo <- r - y.lo
-    res.hi <- r - y.hi
-    is.equal <- res.lo == res.hi
-    numerator <- dnorm(res.hi) - dnorm(res.lo)
-    denominator <- pnorm(r, y.lo) - pnorm(r, y.hi)
+    pnorm.lo <- pnorm(res.lo)
+    pnorm.hi <- pnorm(res.hi)
+    ## The next line ensures the numerical stability of the loss
+    ## function and gradient computation. If both pnorm.lo is close to
+    ## 1, then there are many cases when pnorm(res.lo)-pnorm(res.hi)
+    ## returns exactly 0, but pnorm(-res.hi)-pnorm(-res.lo) returns a
+    ## positive number (They should be the same theoretically, but are
+    ## not in practice on computers due to floating point arithmetic).
+    denominator <- ifelse(pnorm.lo==1, pnorm(-res.hi), pnorm.lo-pnorm.hi)
     loss <- ifelse(
       is.equal,
       0.5 * res.lo * res.lo,
@@ -117,6 +84,45 @@ loss.list <- list(
         0))
     cbind(loss, derivative, constant)
   })
+
+
+prediction.vec <- seq(-100, 100, l=101)
+y.mat <- rbind(
+  c(-Inf, 3),
+  c(-3, Inf),
+  c(-3, 3),
+  c(-0.3, 0.3),
+  c(3, 3))
+loss.lines.list <- list()
+for(loss.name in names(loss.list)){
+  loss.fun <- loss.list[[loss.name]]
+  for(y.i in 1:nrow(y.mat)){
+    y.row <- y.mat[y.i,]
+    y.name <- paste0("(", y.row[1], ",", y.row[2], ")")
+    stopifnot(y.row[1] <= y.row[2])
+    loss.mat <- loss.fun(prediction.vec, y.row[1], y.row[2])
+    loss.lines.list[[paste(loss.name, y.i)]] <- data.table(
+      loss.name, y.i, y.name,
+      prediction=prediction.vec,
+      loss=loss.mat[, "loss"] + loss.mat[, "constant"],
+      derivative=loss.mat[, "derivative"])
+  }
+}
+loss.lines <- do.call(rbind, loss.lines.list)
+## TODO: what to do about instability of tails? quadratic
+## approximation?
+fig.interval.loss.zoom <- ggplot()+
+  ggtitle("interval regression surrogate loss functions")+
+  theme_bw()+
+  theme(panel.margin=grid::unit(0, "lines"))+
+  facet_grid(. ~ y.name, scales="free")+
+  scale_linetype_manual(values=linetypes)+
+  geom_line(aes(prediction, loss, color=loss.name, linetype=loss.name),
+            data=loss.lines)
+pdf("figure-interval-loss-zoom.pdf", w=8, h=3)
+print(fig.interval.loss.zoom)
+dev.off()
+
 prediction.vec <- seq(-10, 10, l=101)
 y.mat <- rbind(
   c(-Inf, 3),
