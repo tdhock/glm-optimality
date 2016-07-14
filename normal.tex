@@ -1,0 +1,82 @@
+\documentclass{article}
+
+\usepackage[cm]{fullpage}
+
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{algorithmic}
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\Lik}{Lik}
+\DeclareMathOperator*{\Peaks}{Peaks}
+\DeclareMathOperator*{\Segments}{Segments}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\maximize}{maximize}
+\DeclareMathOperator*{\minimize}{minimize}
+\newcommand{\sign}{\operatorname{sign}}
+\newcommand{\RR}{\mathbb R}
+\newcommand{\ZZ}{\mathbb Z}
+\newcommand{\NN}{\mathbb N}
+
+\begin{document}
+
+\title{Scale parameter can be ignored in least squares regression}
+\author{Toby Dylan Hocking}
+\maketitle
+
+Assume we have $n$ observations. For each observation
+$i\in\{1,\dots,n\}$ we have features $\mathbf x_i\in\RR^p$ and
+outputs $\underline y_i \leq \overline y_i$. There are four cases of
+outputs:
+\begin{description}
+\item[no censoring] $\underline y_i = \overline y_i \in\RR$.
+\item[left censoring] $\underline y_i=-\infty$ and $\overline y_i \in\RR$.
+\item[right censoring] $\underline y_i\in\RR$ and $\overline y_i=\infty$.
+\item[interval censoring] $\underline y_i<\overline y_i\in\RR$ .
+\end{description}
+
+We consider learning intercept $\beta\in\RR$ and weights
+$\mathbf w\in\RR^p$ in the regression function
+$f(\mathbf x)=\beta + \mathbf x^\intercal \mathbf w \in\RR$ (this is
+the predicted center of the probability distribution).
+
+The optimization objective is
+\begin{equation}
+  \maximize_f \sum_{i=1}^n\log\Lik[f(\mathbf x_i),\underline y_i, \overline y_i]
+\end{equation}
+
+The $\Lik$ function is dependent on which probability distribution is chosen.
+
+\section{Normal distribution}
+
+The Normal distribution with mean $\mu$ and scale $s$ has the
+following density function
+\begin{equation}
+  d_{\mu, s}(x) = (2\sigma^2\pi)^{-1/2} \exp\left(
+    -\frac{x-\mu}{2\sigma^2}
+  \right)
+\end{equation}
+When there is no censoring, $\underline y_i = \overline y_i = y_i$,
+and the likelihood is defined as
+\begin{equation}
+  \Lik[f(\mathbf x_i), y_i, y_i] = d_{f(\mathbf x_i),s}(y_i).
+\end{equation}
+The maximum likelihood problem is thus
+\begin{eqnarray}
+  \max_f \sum_{i=1}^n \log \Lik[f(\mathbf x_i), y_i, y_i] 
+  &=& \max_f \sum_{i=1}^n \log d_{f(\mathbf x_i),s}(y_i)\\
+  &=& \max_f \sum_{i=1}^n -\log(2\sigma^2\pi)/2 - \frac{
+      [y_i-f(\mathbf x_i)]^2}{
+      2\sigma^2}\\
+  &=& \max_f \sum_{i=1}^n - \frac{
+      [y_i-f(\mathbf x_i)]^2}{
+      2\sigma^2} \\
+  &=& \max_f\sum_{i=1}^n  - [y_i-f(\mathbf x_i)]^2\\
+  &=& \min_f \sum_{i=1}^n  [y_i-f(\mathbf x_i)]^2
+\end{eqnarray}
+It is thus clear that the variance parameter $\sigma$ can be ignored
+when finding the optimal prediction function $f$.
+
+
+\end{document}

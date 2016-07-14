@@ -21,6 +21,9 @@ S <- diag(1/sd.vec)
 X.scaled <- X.centered %*% S
 dimnames(X.scaled) <- dimnames(X.unscaled)
 
+## How to get a model equivalent to this one, using spams?
+fit.glmnet.cv <- cv.glmnet(X.unscaled, y.unscaled, family="binomial")
+
 ## X and y will be used in the various solvers.
 X <- X.scaled
 y <- y.unscaled
@@ -48,6 +51,18 @@ for(lambda.i in seq_along(fit.glmnet$lambda)){
 }
 coef.dt <- do.call(rbind, coef.dt.list)
 
+scatter.dt <- dcast(coef.dt, lambda + variable ~ pkg)
+scatter.dt[, spams.0 := spams == 0]
+scatter.dt[, glmnet.0 := glmnet == 0]
+scatter.dt[glmnet.0 != spams.0,]
+fig.scatter <- ggplot()+
+  geom_abline(aes(slope=1, intercept=0),
+              color="grey")+
+  coord_equal()+
+  geom_point(aes(glmnet, spams),
+             shape=1,
+             data=scatter.dt)
+
 fig.path <- ggplot()+
   theme_bw()+
   theme(panel.margin=grid::unit(0, "lines"))+
@@ -55,5 +70,5 @@ fig.path <- ggplot()+
   geom_point(aes(arclength, coef, color=variable),
              data=coef.dt)
 pdf("figure-logistic-criteria.pdf")
-print(fig.path)
+print(fig.scatter)
 dev.off()

@@ -1,12 +1,150 @@
 \documentclass{article}
 
 \usepackage{fullpage,graphicx,amsmath,amssymb}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\sign}{sign}
+\DeclareMathOperator*{\Lik}{Lik}
+\DeclareMathOperator*{\Peaks}{Peaks}
+\DeclareMathOperator*{\HotSpots}{HotSpots}
+\newcommand{\Cost}{\text{Cost}}
+%\DeclareMathOperator*{\Cost}{Cost}
+\DeclareMathOperator*{\Diag}{Diag}
+\DeclareMathOperator*{\TPR}{TPR}
+\DeclareMathOperator*{\Segments}{Segments}
+\DeclareMathOperator*{\FPR}{FPR}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\maximize}{maximize}
+\DeclareMathOperator*{\minimize}{minimize}
+\newcommand{\ZZ}{\mathbb Z}
+\newcommand{\NN}{\mathbb N}
+\newcommand{\RR}{\mathbb R}
 
 \begin{document}
 
 \title{Optimality criteria for elastic net regularized generalized linear models}
 \author{Toby Dylan Hocking}
 \maketitle
+
+\section{Interval regression optimality criteria}
+
+
+The elastic net regularized interval regression model is defined as
+the minimum of
+\begin{equation}
+  \label{eq:cost}
+  \Cost_{\alpha,\lambda}(\mathbf w,\beta,s) = \lambda P_\alpha(\mathbf w) + 
+  \mathcal L(\mathbf w, \beta, s),
+\end{equation}
+where
+\begin{itemize}
+\item  $\mathbf w\in\RR^p$ is a vector of weights
+(one for each of $p$ input features),
+\item $\beta\in\RR$ is the bias/intercept,
+\item $s=\log\sigma\in\RR$ is the log scale parameter
+($\sigma>0$ is the scale parameter), 
+\item $\lambda\in\RR_+$ is the penalty constant (degree of
+  regularization).
+\end{itemize}
+The elastic net penalty function $P_\alpha:\RR^p\rightarrow\RR_+$ is
+convex (and smooth for $\alpha=0$, non-smooth otherwise)
+\begin{equation}
+  P_\alpha(\mathbf w) = \alpha||\mathbf w||_1 + \frac 1 2(1-\alpha)||\mathbf w||_2^2.
+\end{equation}
+The average loss function
+$\mathcal L:\RR^p\times \RR\times \RR\rightarrow \RR$ depends on the
+distribution, but for our AFT models it is convex and smooth.
+
+The subdifferential optimality criteria are
+\begin{eqnarray}
+0 &=&  \nabla_\beta \mathcal L(\mathbf w, \beta, s)\\
+0 &=&  \nabla_s \mathcal L(\mathbf w, \beta, s) \\
+0 &\in&  \partial_{\mathbf w} \Cost_{\alpha,\lambda}(\mathbf w, \beta, s) 
+\end{eqnarray}
+but that will never be achieved exactly on computers. Instead we
+compute $p+2$ sub-optimality criteria (one for $\beta$, one for
+$\sigma$, and one for each of the $p$ weights). The $\beta$ and
+$\sigma$ criteria are simple, since they are not used in the
+penalty. We simply compute the absolute value of the
+gradients/derivatives,
+$|\nabla_\beta \mathcal L(\mathbf w, \beta, s)|$ and
+$|\nabla_s \mathcal L(\mathbf w, \beta, s)|$ (larger values indicate a
+solution which is farther from the global optimum). For the weights we
+have
+\begin{eqnarray}
+  0 &\in& \nabla_{\mathbf w} \mathcal L(\mathbf w, \beta, s)
++ \lambda \partial_{\mathbf w} P_\alpha(\mathbf w) \\
+  \nabla_{\mathbf w} \mathcal L(\mathbf w, \beta, s)
++ \lambda (1-\alpha)\mathbf w 
+&\in& \lambda \alpha \partial_{\mathbf w} ||\mathbf w||_1.
+\end{eqnarray}
+Now we consider cases based on the value of $w_j$. If $w_j\neq 0$ then
+$|w_j|$ is differentiable, and the subdifferential condition
+simplifies to the gradient equality condition:
+\begin{equation}
+  \forall w_j\neq 0,\ 
+  \lambda(1-\alpha)w_j +
+  \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s) = -\lambda\alpha\sign(w_j)
+\end{equation}
+So we just measure the absolute value of the gradient:
+\begin{equation}
+  \forall w_j\neq 0,\ 
+  |
+  \underbrace{\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)}_{\text{common term}}
++
+  \lambda\alpha\sign(w_j)|
+\end{equation}
+For $w_j=0$ we have $\partial|w_j|=[-1,1]$ and we write the
+subdifferential condition
+\begin{equation}
+  \forall w_j= 0,\ 
+\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)
+ \in [-\lambda \alpha ,\, \lambda\alpha]
+\end{equation}
+in terms
+of inequalities,
+\begin{eqnarray*}
+  \forall w_j= 0,\ 
+-\lambda\alpha  \leq
+\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)
+&\leq& \lambda\alpha\\
+  \forall w_j= 0,\ 
+|\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)|
+&\leq& \lambda\alpha\\
+  \forall w_j= 0,\ 
+|\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)|
+ -  \lambda\alpha
+&\leq& 0\\
+\end{eqnarray*}
+Note that if the left hand side is negative or zero, than this
+condition holds. If it is positive than the solution is sub-optimal,
+and so we use the positive part function $(\cdot)_+$ to measure how much this
+condition is violated:
+\begin{equation}
+  \forall w_j= 0,\ 
+  (|\underbrace{\lambda(1-\alpha)w_j +
+    \frac{\partial}{\partial w_j} 
+  \mathcal L(\mathbf w, \beta, s)}_{\text{common term}}|
+ -  \lambda\alpha)_+
+\end{equation}
+These formulas are used in figure-lasso-criteria.R, where
+$\nabla_{\mathbf w}\mathcal L$ is the average square loss (normal
+distribution) for un-censored data, and there are no $s,\beta$
+parameters.
+
+For AFT models you need to derive and compute $\nabla_{s}\mathcal L$,
+$\nabla_{\beta}\mathcal L$, and $\nabla_{\mathbf w}\mathcal L$, which
+depend on the chosen distribution (normal, logistic, Weibull).
 
 \section{Lasso}
 
@@ -16,8 +154,11 @@
 
 \includegraphics[width=\textwidth]{figure-lasso-criteria}
 
-\section{Interval regression}
+\section{Logistic regression}
 
+\includegraphics[width=\textwidth]{figure-lasso-criteria}
+
+\section{Interval regression loss functions}
 \includegraphics[width=\textwidth]{figure-interval-loss}
 
 \includegraphics[width=\textwidth]{figure-interval-loss-derivative}
