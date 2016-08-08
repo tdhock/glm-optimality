@@ -1,4 +1,10 @@
-works_with_R("3.2.3", ggplot2="1.0.1", data.table="1.9.7")
+works_with_R("3.2.2", ggplot2="2.1.0", data.table="1.9.6")
+
+linetypes <- c(
+  logistic="dashed",
+  gaussian="solid",
+  gaussian.diff="dotted",
+  gaussian.mean="dotted")
 
 ## There is definitely a bug in the pnorm function, since pnorm(x)
 ## should be the same as 1-pnorm(-x), but they are not the same! e.g.
